@@ -13,9 +13,11 @@
 
 ## 项目配置
 
+所有配置都在 `config.py` 文件中，包括：
+
 ### 语言项目列表
 ```python
-language_list = [
+LANGUAGE_LIST = [
     "web-language",
     "trade-language"
 ]
@@ -23,9 +25,35 @@ language_list = [
 
 ### 项目映射关系
 ```python
-language_project_map = {
+LANGUAGE_PROJECT_MAP = {
     "web-language": "/Users/eli/Documents/project/weex/web_separation/client/locales",
     "trade-language": "/Users/eli/Documents/project/weex/web-trade/client/locales"
+}
+```
+
+### 同步配置
+```python
+SYNC_CONFIG = {
+    "enable_git_operations": True,  # 是否启用 Git 操作
+    "verbose": True,                # 是否显示详细日志
+    "backup_before_sync": False,    # 是否在同步前备份
+    "file_extensions": [".json"],   # 要同步的文件扩展名
+    "ignore_patterns": [            # 忽略的文件模式
+        "*.tmp",
+        "*.bak",
+        ".git*",
+        "node_modules"
+    ]
+}
+```
+
+### Git 配置
+```python
+GIT_CONFIG = {
+    "default_branch": "main",       # 默认分支
+    "force_checkout": False,        # 是否强制切换分支
+    "timeout": 300,                 # 操作超时时间（秒）
+    "show_git_output": False        # 是否显示 Git 输出
 }
 ```
 
@@ -196,18 +224,45 @@ sync-i18n --help
 
 ## 扩展配置
 
-如需添加新的语言项目，修改 `index.py` 中的配置：
+如需添加新的语言项目，修改 `config.py` 中的配置：
 
 ```python
-self.language_list = [
+# 添加新项目到列表
+LANGUAGE_LIST = [
     "web-language",
     "trade-language",
     "new-language"  # 添加新项目
 ]
 
-self.language_project_map = {
+# 添加映射关系
+LANGUAGE_PROJECT_MAP = {
     "web-language": "/path/to/web/locales",
     "trade-language": "/path/to/trade/locales",
     "new-language": "/path/to/new/locales"  # 添加映射关系
 }
+```
+
+### 配置文件说明
+
+- **LANGUAGE_BASE_PATH**: 语言项目的基础路径
+- **LANGUAGE_LIST**: 所有可用的语言项目列表
+- **LANGUAGE_PROJECT_MAP**: 语言项目到目标路径的映射
+- **SYNC_CONFIG**: 同步相关的配置选项
+- **GIT_CONFIG**: Git 操作的配置选项
+- **LOG_CONFIG**: 日志相关的配置选项
+
+### 自定义配置示例
+
+```python
+# 禁用 Git 操作
+SYNC_CONFIG["enable_git_operations"] = False
+
+# 同步其他文件类型
+SYNC_CONFIG["file_extensions"] = [".json", ".yaml", ".yml"]
+
+# 修改默认分支
+GIT_CONFIG["default_branch"] = "master"
+
+# 启用详细 Git 输出
+GIT_CONFIG["show_git_output"] = True
 ``` 

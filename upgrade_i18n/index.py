@@ -14,18 +14,25 @@ from typing import List, Dict, Set
 import argparse
 from datetime import datetime
 
+# 导入配置文件
+from config import (
+    LANGUAGE_BASE_PATH,
+    LANGUAGE_LIST,
+    LANGUAGE_PROJECT_MAP,
+    SYNC_CONFIG,
+    GIT_CONFIG,
+    LOG_CONFIG
+)
+
 
 class I18nSyncTool:
-    def __init__(self, language_base_path: str = "/Users/eli/Documents/project/weex/language"):
+    def __init__(self, language_base_path: str = LANGUAGE_BASE_PATH):
         self.language_base_path = Path(language_base_path)
-        self.language_list = [
-            "web-language",
-            "trade-language"
-        ]
-        self.language_project_map = {
-            "web-language": "/Users/eli/Documents/project/weex/web_separation/client/locales",
-            "trade-language": "/Users/eli/Documents/project/weex/web-trade/client/locales"
-        }
+        self.language_list = LANGUAGE_LIST
+        self.language_project_map = LANGUAGE_PROJECT_MAP
+        self.sync_config = SYNC_CONFIG
+        self.git_config = GIT_CONFIG
+        self.log_config = LOG_CONFIG
         
     def get_available_languages(self) -> List[str]:
         """获取可用的语言项目列表"""
@@ -90,6 +97,11 @@ class I18nSyncTool:
     
     def git_operations(self, language: str) -> bool:
         """执行 Git 操作"""
+        # 检查是否启用 Git 操作
+        if not self.sync_config.get("enable_git_operations", True):
+            print(f"⚠️  Git 操作已禁用，跳过: {language}")
+            return True
+        
         language_path = self.language_base_path / language
         
         if not language_path.exists():
@@ -114,24 +126,30 @@ class I18nSyncTool:
                 ["git", "branch", "--show-current"], 
                 capture_output=True, 
                 text=True, 
-                check=True
+                check=True,
+                timeout=self.git_config.get("timeout", 300)
             )
             current_branch = result.stdout.strip()
             print(f"   当前分支: {current_branch}")
-
-            # 切换到 main 分支
-            if current_branch != "main":
-                print(f"   🔄 切换到 main 分支...")
-                subprocess.run(["git", "checkout", "main"], check=True)
-                print(f"   ✅ 已切换到 main 分支")
             
-            # get fetch
+            # 切换到默认分支
+            default_branch = self.git_config.get("default_branch", "main")
+            if current_branch != default_branch:
+                print(f"   🔄 切换到 {default_branch} 分支...")
+                checkout_cmd = ["git", "checkout", default_branch]
+                if self.git_config.get("force_checkout", False):
+                    checkout_cmd.append("-f")
+                subprocess.run(checkout_cmd, check=True, timeout=self.git_config.get("timeout", 300))
+                print(f"   ✅ 已切换到 {default_branch} 分支")
+            
+            # 执行 git fetch
             print(f"   📥 执行 git fetch...")
             result = subprocess.run(
                 ["git", "fetch"], 
-                capture_output=True, 
+                capture_output=not self.git_config.get("show_git_output", False), 
                 text=True, 
-                check=True
+                check=True,
+                timeout=self.git_config.get("timeout", 300)
             )
             print(f"   ✅ git fetch 成功")
             
@@ -139,9 +157,10 @@ class I18nSyncTool:
             print(f"   📥 执行 git pull...")
             result = subprocess.run(
                 ["git", "pull"], 
-                capture_output=True, 
+                capture_output=not self.git_config.get("show_git_output", False), 
                 text=True, 
-                check=True
+                check=True,
+                timeout=self.git_config.get("timeout", 300)
             )
             print(f"   ✅ git pull 成功")
             
@@ -149,9 +168,14 @@ class I18nSyncTool:
             os.chdir(original_dir)
             return True
             
+        except subprocess.TimeoutExpired:
+            print(f"❌ Git 操作超时: {language}")
+            os.chdir(original_dir)
+            return False
         except subprocess.CalledProcessError as e:
             print(f"❌ Git 操作失败: {e}")
-            print(f"   错误输出: {e.stderr}")
+            if e.stderr:
+                print(f"   错误输出: {e.stderr}")
             os.chdir(original_dir)
             return False
         except Exception as e:
@@ -160,12 +184,27 @@ class I18nSyncTool:
             return False
     
     def find_json_files(self, source_path: Path) -> List[Path]:
-        """查找所有 JSON 文件"""
-        json_files = []
+        """查找所有指定扩展名的文件"""
+        files = []
         if source_path.exists():
-            for file_path in source_path.rglob("*.json"):
-                json_files.append(file_path)
-        return json_files
+            extensions = self.sync_config.get("file_extensions", [".json"])
+            ignore_patterns = self.sync_config.get("ignore_patterns", [])
+            
+            for file_path in source_path.rglob("*"):
+                if file_path.is_file():
+                    # 检查文件扩展名
+                    if any(file_path.suffix == ext for ext in extensions):
+                        # 检查是否在忽略列表中
+                        should_ignore = False
+                        for pattern in ignore_patterns:
+                            if pattern in str(file_path):
+                                should_ignore = True
+                                break
+                        
+                        if not should_ignore:
+                            files.append(file_path)
+        
+        return files
     
     def sync_json_files(self, source_path: Path, target_path: Path) -> Dict[str, int]:
         """同步 JSON 文件"""
@@ -302,7 +341,7 @@ def main():
     parser = argparse.ArgumentParser(description="国际化语言文档同步工具")
     parser.add_argument(
         "--language-base-path", 
-        default="/Users/eli/Documents/project/weex/language",
+        default=LANGUAGE_BASE_PATH,
         help="语言项目基础路径"
     )
     parser.add_argument(
