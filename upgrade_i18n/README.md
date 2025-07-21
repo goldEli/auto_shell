@@ -2,6 +2,10 @@
 
 一个自动化脚本来同步多个国际化语言项目中的 JSON 文件到对应的目标项目。
 
+## 使用 uv 来管理python 环境
+
+uv run python
+
 ## 功能特性
 
 - 🌍 支持多选语言项目同步
@@ -61,26 +65,26 @@ GIT_CONFIG = {
 
 ### 1. 交互式运行
 ```bash
-python upgrade_i18n/index.py
+uv run python upgrade_i18n/index.py
 ```
 
 ### 2. 指定语言项目
 ```bash
 # 同步单个项目
-python upgrade_i18n/index.py --languages web-language
+uv run python upgrade_i18n/index.py --languages web-language
 
 # 同步多个项目
-python upgrade_i18n/index.py --languages web-language,trade-language
+uv run python upgrade_i18n/index.py --languages web-language,trade-language
 ```
 
 ### 3. 查看可用项目
 ```bash
-python upgrade_i18n/index.py --list
+uv run python upgrade_i18n/index.py --list
 ```
 
 ### 4. 自定义路径
 ```bash
-python upgrade_i18n/index.py --language-base-path /custom/path
+uv run python upgrade_i18n/index.py --language-base-path /custom/path
 ```
 
 ## 全局命令配置
@@ -88,7 +92,7 @@ python upgrade_i18n/index.py --language-base-path /custom/path
 ### 方法一：简单别名
 在 `~/.zshrc` 中添加：
 ```bash
-alias sync-i18n='python3 /Users/eli/Documents/project/github/auto_shell/upgrade_i18n/index.py'
+alias sync-i18n='uv run python /Users/eli/Documents/project/github/auto_shell/upgrade_i18n/index.py'
 ```
 
 ### 方法二：函数方式（推荐）
@@ -97,7 +101,7 @@ alias sync-i18n='python3 /Users/eli/Documents/project/github/auto_shell/upgrade_
 sync-i18n() {
     local script_path="/Users/eli/Documents/project/github/auto_shell/upgrade_i18n/index.py"
     if [ -f "$script_path" ]; then
-        python3 "$script_path" "$@"
+        uv run python "$script_path" "$@"
     else
         echo "❌ 同步工具不存在: $script_path"
         echo "请检查路径是否正确"
@@ -265,4 +269,22 @@ GIT_CONFIG["default_branch"] = "master"
 
 # 启用详细 Git 输出
 GIT_CONFIG["show_git_output"] = True
+```
+
+## 验证配置
+
+配置完成后，可以通过以下命令验证：
+
+```bash
+# 检查别名是否生效
+alias | grep sync-i18n
+
+# 测试命令
+sync-i18n --help
+
+# 检查 Python 脚本是否存在
+ls -la /Users/eli/Documents/project/github/auto_shell/upgrade_i18n/index.py
+
+# 测试配置文件
+uv run python upgrade_i18n/test_config.py
 ``` 
