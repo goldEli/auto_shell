@@ -12,8 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 try:
     from config import (
         LANGUAGE_BASE_PATH,
-        LANGUAGE_LIST,
-        LANGUAGE_PROJECT_MAP,
+        LANGUAGE_PROJECT_LIST,
         SYNC_CONFIG,
         GIT_CONFIG,
         LOG_CONFIG
@@ -24,8 +23,7 @@ try:
     print("-" * 50)
     
     print(f"🌍 语言项目基础路径: {LANGUAGE_BASE_PATH}")
-    print(f"📁 语言项目列表: {LANGUAGE_LIST}")
-    print(f"🎯 项目映射数量: {len(LANGUAGE_PROJECT_MAP)}")
+    print(f"📁 语言项目配置数量: {len(LANGUAGE_PROJECT_LIST)}")
     
     print("\n🔧 同步配置:")
     for key, value in SYNC_CONFIG.items():
@@ -45,23 +43,32 @@ try:
     if base_path.exists():
         print(f"✅ 基础路径存在: {LANGUAGE_BASE_PATH}")
         
-        for language in LANGUAGE_LIST:
-            lang_path = base_path / language
+        for project in LANGUAGE_PROJECT_LIST:
+            if not project.get("enabled", True):
+                print(f"⚠️  项目已禁用: {project['name']}")
+                continue
+            lang_path = base_path / project["name"]
             if lang_path.exists():
-                print(f"✅ 语言项目存在: {language}")
+                print(f"✅ 语言项目存在: {project['name']}")
             else:
-                print(f"❌ 语言项目不存在: {language}")
+                print(f"❌ 语言项目不存在: {project['name']}")
     else:
         print(f"❌ 基础路径不存在: {LANGUAGE_BASE_PATH}")
     
     # 验证目标路径
     print("\n🎯 目标路径验证:")
-    for language, target_path in LANGUAGE_PROJECT_MAP.items():
-        target = Path(target_path)
-        if target.exists():
-            print(f"✅ 目标路径存在: {language} -> {target_path}")
+    for project in LANGUAGE_PROJECT_LIST:
+        if not project.get("enabled", True):
+            continue
+        target_path = project.get("target_path")
+        if target_path:
+            target = Path(target_path)
+            if target.exists():
+                print(f"✅ 目标路径存在: {project['name']} -> {target_path}")
+            else:
+                print(f"⚠️  目标路径不存在: {project['name']} -> {target_path}")
         else:
-            print(f"⚠️  目标路径不存在: {language} -> {target_path}")
+            print(f"❌ 未配置目标路径: {project['name']}")
     
     print("\n🎉 配置测试完成!")
     

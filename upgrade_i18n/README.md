@@ -19,20 +19,20 @@ uv run python
 
 所有配置都在 `config.py` 文件中，包括：
 
-### 语言项目列表
+### 语言项目配置列表
 ```python
-LANGUAGE_LIST = [
-    "web-language",
-    "trade-language"
+LANGUAGE_PROJECT_LIST = [
+    {
+        "name": "web-language",
+        "target_path": "/Users/eli/Documents/project/weex/web_separation/client/locales",
+        "enabled": True
+    },
+    {
+        "name": "trade-language",
+        "target_path": "/Users/eli/Documents/project/weex/web-trade/client/locales",
+        "enabled": True
+    }
 ]
-```
-
-### 项目映射关系
-```python
-LANGUAGE_PROJECT_MAP = {
-    "web-language": "/Users/eli/Documents/project/weex/web_separation/client/locales",
-    "trade-language": "/Users/eli/Documents/project/weex/web-trade/client/locales"
-}
 ```
 
 ### 同步配置
@@ -231,26 +231,30 @@ sync-i18n --help
 如需添加新的语言项目，修改 `config.py` 中的配置：
 
 ```python
-# 添加新项目到列表
-LANGUAGE_LIST = [
-    "web-language",
-    "trade-language",
-    "new-language"  # 添加新项目
+# 添加新项目到配置列表
+LANGUAGE_PROJECT_LIST = [
+    {
+        "name": "web-language",
+        "target_path": "/path/to/web/locales",
+        "enabled": True
+    },
+    {
+        "name": "trade-language",
+        "target_path": "/path/to/trade/locales",
+        "enabled": True
+    },
+    {
+        "name": "new-language",  # 添加新项目
+        "target_path": "/path/to/new/locales",
+        "enabled": True
+    }
 ]
-
-# 添加映射关系
-LANGUAGE_PROJECT_MAP = {
-    "web-language": "/path/to/web/locales",
-    "trade-language": "/path/to/trade/locales",
-    "new-language": "/path/to/new/locales"  # 添加映射关系
-}
 ```
 
 ### 配置文件说明
 
 - **LANGUAGE_BASE_PATH**: 语言项目的基础路径
-- **LANGUAGE_LIST**: 所有可用的语言项目列表
-- **LANGUAGE_PROJECT_MAP**: 语言项目到目标路径的映射
+- **LANGUAGE_PROJECT_LIST**: 语言项目配置列表，包含名称、目标路径和启用状态
 - **SYNC_CONFIG**: 同步相关的配置选项
 - **GIT_CONFIG**: Git 操作的配置选项
 - **LOG_CONFIG**: 日志相关的配置选项
