@@ -1,0 +1,366 @@
+#!/usr/bin/env node
+
+const fs = require('fs');
+const path = require('path');
+const { parse } = require('@babel/parser');
+const traverse = require('@babel/traverse').default;
+const { parse: parseVue } = require('@vue/compiler-sfc');
+
+class I18nKeyFinder {
+    constructor(i18nFilePath) {
+        this.i18nFilePath = i18nFilePath;
+        this.i18nKeys = new Set();
+        this.keyUsageMap = new Map(); // key -> { pages: Set, routes: Set }
+        this.projectRoot = this.findProjectRoot();
+    }
+
+    findProjectRoot() {
+        let currentDir = process.cwd();
+        while (currentDir !== path.dirname(currentDir)) {
+            if (fs.existsSync(path.join(currentDir, 'nuxt.config.js')) ||
+                fs.existsSync(path.join(currentDir, 'nuxt.config.ts')) ||
+                fs.existsSync(path.join(currentDir, 'package.json'))) {
+                return currentDir;
+            }
+            currentDir = path.dirname(currentDir);
+        }
+        return process.cwd();
+    }
+
+    loadI18nFile() {
+        try {
+            const content = fs.readFileSync(this.i18nFilePath, 'utf-8');
+            const data = JSON.parse(content);
+            this.extractKeys(data);
+            console.log(`✅ 成功加载 i18n 文件: ${this.i18nFilePath}`);
+            console.log(`📊 发现 ${this.i18nKeys.size} 个 i18n key`);
+        } catch (error) {
+            console.error(`❌ 加载 i18n 文件失败: ${error.message}`);
+            process.exit(1);
+        }
+    }
+
+    extractKeys(obj, prefix = '') {
+        for (const [key, value] of Object.entries(obj)) {
+            const currentKey = prefix ? `${prefix}.${key}` : key;
+            this.i18nKeys.add(currentKey);
+            
+            if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                this.extractKeys(value, currentKey);
+            }
+        }
+    }
+
+    scanPagesDirectory() {
+        const pagesDir = path.join(this.projectRoot, 'client/pages');
+        if (!fs.existsSync(pagesDir)) {
+            console.log(`⚠️  pages 目录不存在: ${pagesDir}`);
+            return;
+        }
+
+        console.log(`🔍 开始扫描页面目录: ${pagesDir}`);
+        this.scanDirectory(pagesDir, '');
+    }
+
+    scanDirectory(dir, routePrefix) {
+        const items = fs.readdirSync(dir);
+        
+        for (const item of items) {
+            const fullPath = path.join(dir, item);
+            const stat = fs.statSync(fullPath);
+            
+            if (stat.isDirectory()) {
+                // 递归扫描子目录
+                const newPrefix = routePrefix ? `${routePrefix}/${item}` : item;
+                this.scanDirectory(fullPath, newPrefix);
+            } else if (this.isPageFile(item)) {
+                // 扫描页面文件
+                this.scanPageFile(fullPath, routePrefix);
+            }
+        }
+    }
+
+    isPageFile(filename) {
+        return filename.endsWith('.vue') || filename.endsWith('.js') || filename.endsWith('.ts');
+    }
+
+    scanPageFile(filePath, routePrefix) {
+        try {
+            const content = fs.readFileSync(filePath, 'utf-8');
+            const filename = path.basename(filePath);
+            
+            if (filename.endsWith('.vue')) {
+                this.scanVueFile(content, filePath, routePrefix);
+            } else {
+                this.scanJsFile(content, filePath, routePrefix);
+            }
+        } catch (error) {
+            console.error(`⚠️ 扫描文件失败 ${filePath}: ${error.message}`);
+        }
+    }
+
+    scanVueFile(content, filePath, routePrefix) {
+        try {
+            const result = parseVue(content);
+            
+            // 扫描 template
+            if (result.descriptor && result.descriptor.template) {
+                this.scanTemplate(result.descriptor.template.content, filePath, routePrefix);
+            }
+            
+            // 扫描 script
+            if (result.descriptor && result.descriptor.script) {
+                this.scanScript(result.descriptor.script.content, filePath, routePrefix);
+            }
+            
+            // 如果解析成功但没有找到内容，也使用正则表达式作为补充
+            if (!result.descriptor || !result.descriptor.template) {
+                console.log(`📝 Vue 解析成功但未找到模板，使用正则表达式补充扫描`);
+                this.scanVueFileWithRegex(content, filePath, routePrefix);
+            }
+        } catch (error) {
+            console.error(`⚠️ 解析 Vue 文件失败 ${filePath}: ${error.message}`);
+            // 如果解析失败，尝试使用正则表达式扫描整个文件
+            this.scanVueFileWithRegex(content, filePath, routePrefix);
+        }
+    }
+
+    scanVueFileWithRegex(content, filePath, routePrefix) {
+        console.log(`🔍 使用正则表达式扫描 Vue 文件: ${path.basename(filePath)}`);
+        
+        // 使用正则表达式查找模板中的 i18n 调用
+        const i18nPatterns = [
+            /\{\{\s*\$t\(['"`]([^'"`]+)['"`]\)\s*\}\}/g,
+            /\{\{\s*\$tc\(['"`]([^'"`]+)['"`]\)\s*\}\}/g,
+            /\{\{\s*\$te\(['"`]([^'"`]+)['"`]\)\s*\}\}/g,
+            /\{\{\s*\$d\(['"`]([^'"`]+)['"`]\)\s*\}\}/g
+        ];
+
+        let totalMatches = 0;
+        i18nPatterns.forEach((pattern, index) => {
+            let match;
+            let matchCount = 0;
+            while ((match = pattern.exec(content)) !== null) {
+                const key = match[1];
+                this.addKeyUsage(key, filePath, routePrefix);
+                matchCount++;
+                totalMatches++;
+            }
+            if (matchCount > 0) {
+                console.log(`   Pattern ${index + 1} 找到 ${matchCount} 个匹配`);
+            }
+        });
+
+        console.log(`   📊 模板中总共找到 ${totalMatches} 个 i18n 调用`);
+
+        // 扫描 script 部分
+        const scriptMatch = content.match(/<script[^>]*>([\s\S]*?)<\/script>/);
+        if (scriptMatch) {
+            const scriptContent = scriptMatch[1];
+            console.log(`   📜 找到 script 标签，开始扫描...`);
+            this.scanScriptWithRegex(scriptContent, filePath, routePrefix);
+        } else {
+            console.log(`   📜 未找到 script 标签`);
+        }
+    }
+
+    scanJsFile(content, filePath, routePrefix) {
+        try {
+            const ast = parse(content, {
+                sourceType: 'module',
+                plugins: ['jsx', 'typescript']
+            });
+            
+            this.findI18nCalls(ast, filePath, routePrefix);
+        } catch (error) {
+            console.error(`⚠️ 解析 JS/TS 文件失败 ${filePath}: ${error.message}`);
+        }
+    }
+
+    scanTemplate(templateContent, filePath, routePrefix) {
+        // 使用正则表达式查找模板中的 i18n 调用
+        const i18nPatterns = [
+            /\$t\(['"`]([^'"`]+)['"`]\)/g,
+            /\$tc\(['"`]([^'"`]+)['"`]\)/g,
+            /\$te\(['"`]([^'"`]+)['"`]\)/g,
+            /\$d\(['"`]([^'"`]+)['"`]\)/g
+        ];
+
+        i18nPatterns.forEach(pattern => {
+            let match;
+            while ((match = pattern.exec(templateContent)) !== null) {
+                const key = match[1];
+                this.addKeyUsage(key, filePath, routePrefix);
+            }
+        });
+    }
+
+    scanScript(scriptContent, filePath, routePrefix) {
+        try {
+            const ast = parse(scriptContent, {
+                sourceType: 'module',
+                plugins: ['jsx', 'typescript']
+            });
+            
+            this.findI18nCalls(ast, filePath, routePrefix);
+        } catch (error) {
+            // 如果解析失败，尝试使用正则表达式
+            this.scanScriptWithRegex(scriptContent, filePath, routePrefix);
+        }
+    }
+
+    scanScriptWithRegex(scriptContent, filePath, routePrefix) {
+        const i18nPatterns = [
+            /\$t\(['"`]([^'"`]+)['"`]\)/g,
+            /\$tc\(['"`]([^'"`]+)['"`]\)/g,
+            /\$te\(['"`]([^'"`]+)['"`]\)/g,
+            /\$d\(['"`]([^'"`]+)['"`]\)/g
+        ];
+
+        i18nPatterns.forEach(pattern => {
+            let match;
+            while ((match = pattern.exec(scriptContent)) !== null) {
+                const key = match[1];
+                this.addKeyUsage(key, filePath, routePrefix);
+            }
+        });
+    }
+
+    findI18nCalls(ast, filePath, routePrefix) {
+        const self = this;
+        traverse(ast, {
+            CallExpression(path) {
+                const { callee, arguments: args } = path.node;
+                
+                if (callee.type === 'MemberExpression' && 
+                    callee.object.name === '$t' && 
+                    args.length > 0 && 
+                    args[0].type === 'StringLiteral') {
+                    
+                    const key = args[0].value;
+                    self.addKeyUsage(key, filePath, routePrefix);
+                }
+            }
+        });
+    }
+
+    addKeyUsage(key, filePath, routePrefix) {
+        if (!this.i18nKeys.has(key)) {
+            return; // 只关注 i18n 文件中存在的 key
+        }
+
+        if (!this.keyUsageMap.has(key)) {
+            this.keyUsageMap.set(key, { pages: new Set(), routes: new Set() });
+        }
+
+        const usage = this.keyUsageMap.get(key);
+        usage.pages.add(filePath);
+        
+        // 生成路由路径
+        const route = this.generateRoute(filePath, routePrefix);
+        if (route) {
+            usage.routes.add(route);
+        }
+    }
+
+    generateRoute(filePath, routePrefix) {
+        const relativePath = path.relative(path.join(this.projectRoot, 'pages'), filePath);
+        const route = relativePath
+            .replace(/\.(vue|js|ts)$/, '')
+            .replace(/\/index$/, '')
+            .replace(/\/_/, '/:') // 动态路由参数
+            .replace(/\\/g, '/'); // Windows 路径分隔符转换
+
+        return route.startsWith('/') ? route : `/${route}`;
+    }
+
+    generateReport() {
+        console.log('\n' + '='.repeat(80));
+        console.log('📋 i18n Key 与页面路由关系报告');
+        console.log('='.repeat(80));
+
+        const sortedKeys = Array.from(this.keyUsageMap.keys()).sort();
+        
+        if (sortedKeys.length === 0) {
+            console.log('❌ 未找到任何 i18n key 的使用情况');
+            return;
+        }
+
+        console.log(`\n📊 统计信息:`);
+        console.log(`   - 总 key 数量: ${this.i18nKeys.size}`);
+        console.log(`   - 被使用的 key 数量: ${sortedKeys.length}`);
+        console.log(`   - 未使用的 key 数量: ${this.i18nKeys.size - sortedKeys.length}`);
+
+        console.log('\n🔍 详细使用情况:');
+        console.log('-'.repeat(80));
+        
+        sortedKeys.forEach(key => {
+            const usage = this.keyUsageMap.get(key);
+            const routes = Array.from(usage.routes).sort();
+            const pages = Array.from(usage.pages).map(p => path.relative(this.projectRoot, p));
+            
+            console.log(`\n🔑 Key: ${key}`);
+            console.log(`   📍 路由: ${routes.join(', ') || '无'}`);
+            console.log(`   📄 文件: ${pages.join(', ')}`);
+        });
+
+        // 显示未使用的 key
+        // const unusedKeys = Array.from(this.i18nKeys).filter(key => !this.keyUsageMap.has(key));
+        // if (unusedKeys.length > 0) {
+        //     console.log('\n⚠️ 未使用的 i18n keys:');
+        //     console.log('-'.repeat(80));
+        //     unusedKeys.forEach(key => {
+        //         console.log(`   ${key}`);
+        //     });
+        // }
+    }
+
+    run() {
+        console.log('🚀 开始分析 Nuxt2 + Vue i18n 项目...');
+        console.log(`📁 项目根目录: ${this.projectRoot}`);
+        console.log(`🌐 i18n 文件: ${this.i18nFilePath}`);
+        
+        this.loadI18nFile();
+        this.scanPagesDirectory();
+        this.generateReport();
+    }
+}
+
+// 命令行参数处理
+function parseArguments() {
+    const args = process.argv.slice(2);
+    let i18nFilePath = null;
+    
+    for (let i = 0; i < args.length; i++) {
+        if (args[i] === '-f' && i + 1 < args.length) {
+            i18nFilePath = args[i + 1];
+            break;
+        }
+    }
+    
+    if (!i18nFilePath) {
+        console.error('❌ 使用方法: find_key_vue2 -f <i18n文件路径>');
+        console.error('   示例: find_key_vue2 -f src/locales/en.json');
+        process.exit(1);
+    }
+    
+    return i18nFilePath;
+}
+
+// 主函数
+function main() {
+    try {
+        const i18nFilePath = parseArguments();
+        const finder = new I18nKeyFinder(i18nFilePath);
+        finder.run();
+    } catch (error) {
+        console.error('❌ 程序执行失败:', error.message);
+        process.exit(1);
+    }
+}
+
+if (require.main === module) {
+    main();
+}
+
+module.exports = I18nKeyFinder;

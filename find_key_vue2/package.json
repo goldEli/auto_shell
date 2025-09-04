@@ -1,0 +1,32 @@
+{
+  "name": "find_key_vue2",
+  "version": "1.0.0",
+  "description": "查找 Nuxt2 + Vue i18n 项目中 i18n key 与页面路由的关系",
+  "main": "index.js",
+  "bin": {
+    "find_key_vue2": "./index.js"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "nuxt2",
+    "vue",
+    "i18n",
+    "internationalization",
+    "localization",
+    "key-finder",
+    "route-mapping"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@babel/parser": "^7.23.0",
+    "@babel/traverse": "^7.23.0",
+    "@vue/compiler-sfc": "^2.7.0"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
