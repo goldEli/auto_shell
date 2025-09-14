@@ -1,0 +1,12 @@
+[
+    {
+        "project_name": "web-language",
+        "target_path": "xxx/client/locales",
+        "source_path": "xxx/web-language"
+    },
+    {
+        "project_name": "trade-language",
+        "target_path": "xxx/web-trade/client/locales",
+        "source_path": "xxx/trade-language"
+    }
+]
