@@ -328,7 +328,7 @@ class I18nKeyFinder {
             
             const jsonResult = {
                 metadata: {
-                    projectRoot: this.projectRoot,
+                    // projectRoot: this.projectRoot,
                     i18nFile: this.i18nFilePath,
                     generatedAt: new Date().toISOString(),
                     totalKeys: this.i18nKeys.size,
