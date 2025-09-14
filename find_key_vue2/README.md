@@ -10,6 +10,7 @@
 - 🛣️ 生成 key 与 Nuxt 路由的映射关系
 - 📊 提供详细的统计报告
 - ⚠️ 标记未使用的 i18n key
+- 💾 支持 JSON 格式输出，便于程序化处理
 
 ## 安装
 
@@ -54,11 +55,14 @@ find_key_vue2 -f <i18n文件路径>
 # 示例
 find_key_vue2 -f src/locales/en.json
 find_key_vue2 -f locales/zh-cn.json
+find_key_vue2 -f src/locales/en.json -o result.json
+find_key_vue2 -f locales/zh-cn.json -o zh-cn-analysis.json
 ```
 
 ### 参数说明
 
 - `-f`: 指定 i18n 英文文件路径（必需）
+- `-o`: 指定 JSON 输出文件路径（可选）
 
 ## 输出示例
 
@@ -101,6 +105,43 @@ find_key_vue2 -f locales/zh-cn.json
 - **Vue 单文件组件** (.vue)
 - **JavaScript 文件** (.js)
 - **TypeScript 文件** (.ts)
+
+## JSON 输出格式
+
+当使用 `-o` 参数时，工具会生成结构化的 JSON 文件，包含以下信息：
+
+```json
+{
+  "metadata": {
+    "projectRoot": "项目根目录路径",
+    "i18nFile": "i18n 文件路径",
+    "generatedAt": "生成时间",
+    "totalKeys": "总 key 数量",
+    "usedKeys": "已使用的 key 数量",
+    "unusedKeys": "未使用的 key 数量"
+  },
+  "statistics": {
+    "totalKeys": "总 key 数量",
+    "usedKeys": "已使用的 key 数量",
+    "unusedKeys": "未使用的 key 数量",
+    "usageRate": "使用率百分比"
+  },
+  "keyUsage": [
+    {
+      "key": "i18n key",
+      "routes": ["使用的路由列表"],
+      "pages": ["使用的页面文件列表"],
+      "routeCount": "路由数量",
+      "pageCount": "页面数量"
+    }
+  ],
+  "unusedKeys": ["未使用的 key 列表"],
+  "summary": {
+    "keysWithMultipleRoutes": "在多个路由中使用的 key 数量",
+    "keysWithMultiplePages": "在多个页面中使用的 key 数量"
+  }
+}
+```
 
 ## 支持的 i18n 调用方式
 

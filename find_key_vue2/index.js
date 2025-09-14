@@ -7,8 +7,9 @@ const traverse = require('@babel/traverse').default;
 const { parse: parseVue } = require('@vue/compiler-sfc');
 
 class I18nKeyFinder {
-    constructor(i18nFilePath) {
+    constructor(i18nFilePath, outputFilePath) {
         this.i18nFilePath = i18nFilePath;
+        this.outputFilePath = outputFilePath;
         this.i18nKeys = new Set();
         this.keyUsageMap = new Map(); // key -> { pages: Set, routes: Set }
         this.projectRoot = this.findProjectRoot();
@@ -294,15 +295,15 @@ class I18nKeyFinder {
         console.log('\n🔍 详细使用情况:');
         console.log('-'.repeat(80));
         
-        sortedKeys.forEach(key => {
-            const usage = this.keyUsageMap.get(key);
-            const routes = Array.from(usage.routes).sort();
-            const pages = Array.from(usage.pages).map(p => path.relative(this.projectRoot, p));
+        // sortedKeys.forEach(key => {
+            // const usage = this.keyUsageMap.get(key);
+            // const routes = Array.from(usage.routes).sort();
+            // const pages = Array.from(usage.pages).map(p => path.relative(this.projectRoot, p));
             
-            console.log(`\n🔑 Key: ${key}`);
-            console.log(`   📍 路由: ${routes.join(', ') || '无'}`);
-            console.log(`   📄 文件: ${pages.join(', ')}`);
-        });
+            // console.log(`\n🔑 Key: ${key}`);
+            // console.log(`   📍 路由: ${routes.join(', ') || '无'}`);
+            // console.log(`   📄 文件: ${pages.join(', ')}`);
+        // });
 
         // 显示未使用的 key
         // const unusedKeys = Array.from(this.i18nKeys).filter(key => !this.keyUsageMap.has(key));
@@ -313,6 +314,68 @@ class I18nKeyFinder {
         //         console.log(`   ${key}`);
         //     });
         // }
+
+        // 如果指定了输出文件，生成 JSON 文件
+        if (this.outputFilePath) {
+            this.generateJsonOutput();
+        }
+    }
+
+    generateJsonOutput() {
+        try {
+            const sortedKeys = Array.from(this.keyUsageMap.keys()).sort();
+            const unusedKeys = Array.from(this.i18nKeys).filter(key => !this.keyUsageMap.has(key)).sort();
+            
+            const jsonResult = {
+                metadata: {
+                    projectRoot: this.projectRoot,
+                    i18nFile: this.i18nFilePath,
+                    generatedAt: new Date().toISOString(),
+                    totalKeys: this.i18nKeys.size,
+                    usedKeys: sortedKeys.length,
+                    unusedKeys: unusedKeys.length
+                },
+                statistics: {
+                    totalKeys: this.i18nKeys.size,
+                    usedKeys: sortedKeys.length,
+                    unusedKeys: unusedKeys.length,
+                    usageRate: ((sortedKeys.length / this.i18nKeys.size) * 100).toFixed(2) + '%'
+                },
+                keyUsage: sortedKeys.map(key => {
+                    const usage = this.keyUsageMap.get(key);
+                    const routes = Array.from(usage.routes).sort();
+                    // const pages = Array.from(usage.pages).map(p => path.relative(this.projectRoot, p));
+                    
+                    return {
+                        key: key,
+                        routes: routes?.map(item => {
+                            return item.split(':lang')?.[1] || ''
+                        }),
+                        // pages: pages,
+                        // routeCount: routes.length,
+                        // pageCount: pages.length
+                    };
+                }),
+                // unusedKeys: unusedKeys,
+                summary: {
+                    keysWithMultipleRoutes: sortedKeys.filter(key => {
+                        const usage = this.keyUsageMap.get(key);
+                        return usage.routes.size > 1;
+                    }).length,
+                    keysWithMultiplePages: sortedKeys.filter(key => {
+                        const usage = this.keyUsageMap.get(key);
+                        return usage.pages.size > 1;
+                    }).length
+                }
+            };
+
+            // 写入 JSON 文件
+            fs.writeFileSync(this.outputFilePath, JSON.stringify(jsonResult, null, 2), 'utf-8');
+            console.log(`\n💾 JSON 结果已保存到: ${this.outputFilePath}`);
+            
+        } catch (error) {
+            console.error(`❌ 生成 JSON 文件失败: ${error.message}`);
+        }
     }
 
     run() {
@@ -330,28 +393,31 @@ class I18nKeyFinder {
 function parseArguments() {
     const args = process.argv.slice(2);
     let i18nFilePath = null;
+    let outputFilePath = null;
     
     for (let i = 0; i < args.length; i++) {
         if (args[i] === '-f' && i + 1 < args.length) {
             i18nFilePath = args[i + 1];
-            break;
+        } else if (args[i] === '-o' && i + 1 < args.length) {
+            outputFilePath = args[i + 1];
         }
     }
     
     if (!i18nFilePath) {
-        console.error('❌ 使用方法: find_key_vue2 -f <i18n文件路径>');
+        console.error('❌ 使用方法: find_key_vue2 -f <i18n文件路径> [-o <输出文件路径>]');
         console.error('   示例: find_key_vue2 -f src/locales/en.json');
+        console.error('   示例: find_key_vue2 -f src/locales/en.json -o result.json');
         process.exit(1);
     }
     
-    return i18nFilePath;
+    return { i18nFilePath, outputFilePath };
 }
 
 // 主函数
 function main() {
     try {
-        const i18nFilePath = parseArguments();
-        const finder = new I18nKeyFinder(i18nFilePath);
+        const { i18nFilePath, outputFilePath } = parseArguments();
+        const finder = new I18nKeyFinder(i18nFilePath, outputFilePath);
         finder.run();
     } catch (error) {
         console.error('❌ 程序执行失败:', error.message);

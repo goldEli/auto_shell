@@ -25,6 +25,9 @@ find_key_vue2 -f src/locales/en.json
 find_key_vue2 -f locales/en.json
 # 或者
 find_key_vue2 -f i18n/en.json
+
+# 输出到 JSON 文件
+find_key_vue2 -f src/locales/en.json -o analysis-result.json
 ```
 
 ### 3. 查看结果
