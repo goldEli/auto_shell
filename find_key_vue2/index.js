@@ -6,6 +6,121 @@ const { parse } = require('@babel/parser');
 const traverse = require('@babel/traverse').default;
 const { parseComponent, compile } = require('vue-template-compiler');
 
+
+// 递归遍历 Vue AST
+function traverseVueAst(node, cb) {
+    if (!node) return
+
+    // 表达式 (插值 or 绑定)
+    if (node.expression) {
+        cb(node.expression)
+    }
+    if (node.attrsMap) {
+        Object.values(node.attrsMap).forEach(val => cb(val))
+    }
+
+    if (node.children) {
+        node.children.forEach(child => traverseVueAst(child, cb))
+    }
+}
+
+// 3. Babel 解析表达式 AST，提取 $t 的参数
+function extractTKeys(content) {
+    try {
+        // const ast = babelParser.parseExpression(expr)
+
+        const ast = parse(content, {
+            sourceType: 'module',
+            plugins: ['jsx', 'typescript']
+        });
+        const keys = []
+
+        traverse(ast, {
+            CallExpression(path) {
+                if (
+                    (path.node.callee.type === 'MemberExpression' &&
+                        path.node.callee.property.name === '$t') ||
+                    (path.node.callee.type === 'Identifier' &&
+                        path.node.callee.name === '$t')
+                ) {
+                    const arg = path.node.arguments[0]
+                    if (arg && arg.type === 'StringLiteral') {
+                        keys.push(arg.value)
+                    }
+                }
+            }
+        })
+
+        return keys
+    } catch (e) {
+        return []
+    }
+}
+
+function scanTemplate(templateContent) {
+    const res = compile(templateContent)
+
+    const allKeys = []
+    traverseVueAst(res.ast, expr => {
+        // console.log(expr, filePath);
+        const keys = extractTKeys(expr)
+        if (keys.length) {
+            allKeys.push(...keys)
+            // for (const key of keys) {
+            //     // console.log(key, filePath);
+            //     this.addKeyUsage(key, filePath, routePrefix);
+            // }
+        }
+    })
+
+    return allKeys
+}
+
+
+function findI18nCalls(content) {
+
+    const ast = parse(content, {
+        sourceType: 'module',
+        plugins: ['jsx', 'typescript']
+    });
+
+    const keys = []
+    traverse(ast, {
+        CallExpression(path) {
+            if (
+                (path.node.callee.type === 'MemberExpression' &&
+                    path.node.callee.property.name === '$t') ||
+                (path.node.callee.type === 'Identifier' &&
+                    path.node.callee.name === '$t')
+            ) {
+                const arg = path.node.arguments[0]
+                if (arg && arg.type === 'StringLiteral') {
+                    keys.push(arg.value)
+                    // self.addKeyUsage(arg.value, filePath, routePrefix);
+                }
+            }
+        }
+    })
+    return keys
+
+    // traverse(ast, {
+    //     CallExpression(path) {
+    //         const { callee, arguments: args } = path.node;
+
+    //         if (callee.type === 'MemberExpression' && 
+    //             callee.object.name === '$t' && 
+    //             args.length > 0 && 
+    //             args[0].type === 'StringLiteral') {
+
+    //             console.log(args[0].value, filePath);
+
+    //             const key = args[0].value;
+    //             self.addKeyUsage(key, filePath, routePrefix);
+    //         }
+    //     }
+    // });
+}
+
 class I18nKeyFinder {
     constructor(i18nFilePath, outputFilePath) {
         this.i18nFilePath = i18nFilePath;
@@ -104,11 +219,12 @@ class I18nKeyFinder {
         try {
             const result = parseComponent(content);
 
-            // console.log(result, filePath);
-
             // 扫描 template
             if (result.template) {
-                this.scanTemplate(result.template.content, filePath, routePrefix);
+                const keys = scanTemplate(result.template.content);
+                for (const key of keys) {
+                    this.addKeyUsage(key, filePath, routePrefix);
+                }
             }
 
             // 扫描 script
@@ -169,108 +285,26 @@ class I18nKeyFinder {
 
     scanJsFile(content, filePath, routePrefix) {
         try {
-            const ast = parse(content, {
-                sourceType: 'module',
-                plugins: ['jsx', 'typescript']
-            });
 
-            this.findI18nCalls(ast, filePath, routePrefix);
+            const keys = findI18nCalls(content);
+            for (const key of keys) {
+                this.addKeyUsage(key, filePath, routePrefix);
+            }
         } catch (error) {
             console.error(`⚠️ 解析 JS/TS 文件失败 ${filePath}: ${error.message}`);
         }
     }
 
-    // 递归遍历 Vue AST
-    traverseVueAst(node, cb) {
-        if (!node) return
 
-        // 表达式 (插值 or 绑定)
-        if (node.expression) {
-            cb(node.expression)
-        }
-        if (node.attrsMap) {
-            Object.values(node.attrsMap).forEach(val => cb(val))
-        }
 
-        if (node.children) {
-            node.children.forEach(child => this.traverseVueAst(child, cb))
-        }
-    }
-
-    // 3. Babel 解析表达式 AST，提取 $t 的参数
-    extractTKeys(content) {
-        try {
-            // const ast = babelParser.parseExpression(expr)
-
-            const ast = parse(content, {
-                sourceType: 'module',
-                plugins: ['jsx', 'typescript']
-            });
-            const keys = []
-
-            traverse(ast, {
-                CallExpression(path) {
-                    if (
-                        (path.node.callee.type === 'MemberExpression' &&
-                            path.node.callee.property.name === '$t') ||
-                        (path.node.callee.type === 'Identifier' &&
-                            path.node.callee.name === '$t')
-                    ) {
-                        const arg = path.node.arguments[0]
-                        if (arg && arg.type === 'StringLiteral') {
-                            keys.push(arg.value)
-                        }
-                    }
-                }
-            })
-
-            return keys
-        } catch (e) {
-            return []
-        }
-    }
-
-    scanTemplate(templateContent, filePath, routePrefix) {
-        const res = compile(templateContent)
-
-        // const allKeys = []
-        this.traverseVueAst(res.ast, expr => {
-            // console.log(expr, filePath);
-            const keys = this.extractTKeys(expr)
-            if (keys.length) {
-                // allKeys.push(...keys)
-                console.log(keys, filePath);
-                for (const key of keys) {
-                    // console.log(key, filePath);
-                    this.addKeyUsage(key, filePath, routePrefix);
-                }
-            }
-        })
-        // 使用正则表达式查找模板中的 i18n 调用
-        // const i18nPatterns = [
-        //     /\$t\(['"`]([^'"`]+)['"`]\)/g,
-        //     /\$tc\(['"`]([^'"`]+)['"`]\)/g,
-        //     /\$te\(['"`]([^'"`]+)['"`]\)/g,
-        //     /\$d\(['"`]([^'"`]+)['"`]\)/g
-        // ];
-
-        // i18nPatterns.forEach(pattern => {
-        //     let match;
-        //     while ((match = pattern.exec(templateContent)) !== null) {
-        //         const key = match[1];
-        //         this.addKeyUsage(key, filePath, routePrefix);
-        //     }
-        // });
-    }
 
     scanScript(scriptContent, filePath, routePrefix) {
         try {
-            const ast = parse(scriptContent, {
-                sourceType: 'module',
-                plugins: ['jsx', 'typescript']
-            });
 
-            this.findI18nCalls(ast, filePath, routePrefix);
+            const keys = findI18nCalls(scriptContent);
+            for (const key of keys) {
+                this.addKeyUsage(key, filePath, routePrefix);
+            }
         } catch (error) {
             // 如果解析失败，尝试使用正则表达式
             this.scanScriptWithRegex(scriptContent, filePath, routePrefix);
@@ -294,43 +328,6 @@ class I18nKeyFinder {
         });
     }
 
-    findI18nCalls(ast, filePath, routePrefix) {
-        const self = this;
-
-        traverse(ast, {
-            CallExpression(path) {
-                if (
-                    (path.node.callee.type === 'MemberExpression' &&
-                        path.node.callee.property.name === '$t') ||
-                    (path.node.callee.type === 'Identifier' &&
-                        path.node.callee.name === '$t')
-                ) {
-                    const arg = path.node.arguments[0]
-                    if (arg && arg.type === 'StringLiteral') {
-                        // keys.push(arg.value)
-                        self.addKeyUsage(arg.value, filePath, routePrefix);
-                    }
-                }
-            }
-        })
-
-        // traverse(ast, {
-        //     CallExpression(path) {
-        //         const { callee, arguments: args } = path.node;
-
-        //         if (callee.type === 'MemberExpression' && 
-        //             callee.object.name === '$t' && 
-        //             args.length > 0 && 
-        //             args[0].type === 'StringLiteral') {
-
-        //             console.log(args[0].value, filePath);
-
-        //             const key = args[0].value;
-        //             self.addKeyUsage(key, filePath, routePrefix);
-        //         }
-        //     }
-        // });
-    }
 
     addKeyUsage(key, filePath, routePrefix) {
         if (!this.i18nKeys.has(key)) {
@@ -515,5 +512,6 @@ function main() {
 if (require.main === module) {
     main();
 }
+
 
 module.exports = I18nKeyFinder;
