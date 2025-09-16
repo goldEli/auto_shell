@@ -128,6 +128,7 @@ class I18nKeyFinder {
         this.i18nKeys = new Set();
         this.keyUsageMap = new Map(); // key -> { pages: Set, routes: Set }
         this.projectRoot = this.findProjectRoot();
+        this.scannedFiles = new Set(); // 防止重复扫描
     }
 
     findProjectRoot() {
@@ -163,6 +164,123 @@ class I18nKeyFinder {
 
             if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
                 this.extractKeys(value, currentKey);
+            }
+        }
+    }
+
+    // 解析 script 中的 import 语句
+    extractImports(scriptContent) {
+        try {
+            const ast = parse(scriptContent, {
+                sourceType: 'module',
+                plugins: ['jsx', 'typescript']
+            });
+
+            const imports = [];
+            traverse(ast, {
+                ImportDeclaration(path) {
+                    const source = path.node.source.value;
+                    imports.push(source);
+                }
+            });
+
+            return imports;
+        } catch (error) {
+            console.error(`⚠️ 解析 import 语句失败: ${error.message}`);
+            return [];
+        }
+    }
+
+    // 解析 import 路径为实际文件路径
+    resolveImportPath(importPath, currentFilePath) {
+        const currentDir = path.dirname(currentFilePath);
+
+        // 处理相对路径
+        if (importPath.startsWith('./') || importPath.startsWith('../')) {
+            const resolvedPath = path.resolve(currentDir, importPath);
+
+            // 尝试不同的文件扩展名
+            const extensions = ['.js', '.ts', '.vue', '.json'];
+            for (const ext of extensions) {
+                const fullPath = resolvedPath + ext;
+                if (fs.existsSync(fullPath)) {
+                    return fullPath;
+                }
+            }
+
+            // 尝试 index 文件
+            for (const ext of extensions) {
+                const indexPath = path.join(resolvedPath, 'index' + ext);
+                if (fs.existsSync(indexPath)) {
+                    return indexPath;
+                }
+            }
+        }
+
+        // 处理绝对路径或 node_modules
+        if (importPath.startsWith('/') || importPath.startsWith('@/')) {
+            let resolvedPath;
+            if (importPath.startsWith('@/')) {
+                // 处理 @ 别名，通常指向 src 目录
+                resolvedPath = path.join(this.projectRoot, 'src', importPath.slice(2));
+            } else {
+                resolvedPath = path.resolve(this.projectRoot, importPath);
+            }
+
+            const extensions = ['.js', '.ts', '.vue', '.json'];
+            for (const ext of extensions) {
+                const fullPath = resolvedPath + ext;
+                if (fs.existsSync(fullPath)) {
+                    return fullPath;
+                }
+            }
+        }
+
+
+        if (importPath.startsWith('~/')) {
+            let resolvedPath;
+            resolvedPath = path.join(this.projectRoot, 'client', importPath.slice(2));
+
+            if (fs.existsSync(resolvedPath)) {
+                return resolvedPath;
+            }
+
+            const extensions = ['.js', '.vue'];
+            for (const ext of extensions) {
+                const fullPath = resolvedPath + ext;
+                if (fs.existsSync(fullPath)) {
+                    return fullPath;
+                }
+            }
+
+        }
+
+        return null;
+    }
+
+    // 递归扫描 import 文件
+    scanImportedFiles(imports, currentFilePath, routePrefix) {
+        // console.log(imports, currentFilePath, routePrefix);
+        for (const importPath of imports) {
+            const resolvedPath = this.resolveImportPath(importPath, currentFilePath);
+            // console.log(resolvedPath, importPath, currentFilePath );
+
+            if (resolvedPath && !this.scannedFiles.has(resolvedPath)) {
+                this.scannedFiles.add(resolvedPath);
+                console.log(`🔍 扫描 import 文件: ${path.relative(this.projectRoot, resolvedPath)}`);
+
+                try {
+                    const content = fs.readFileSync(resolvedPath, 'utf-8');
+                    const ext = path.extname(resolvedPath);
+
+                    if (ext === '.vue') {
+                        this.scanVueFile(content, resolvedPath, routePrefix);
+                    } else if (ext === '.js' || ext === '.ts') {
+                        this.scanJsFile(content, resolvedPath, routePrefix);
+                    }
+                } catch (error) {
+                    console.error(`⚠️ 扫描 import 文件失败 ${resolvedPath}: ${error.message}`);
+                }
             }
         }
     }
@@ -230,6 +348,13 @@ class I18nKeyFinder {
             // 扫描 script
             if (result.script) {
                 this.scanScript(result.script.content, filePath, routePrefix);
+
+                // 递归扫描 script 中的 import 文件
+                const imports = this.extractImports(result.script.content);
+                if (imports.length > 0) {
+                    // console.log(`📦 发现 ${imports.length} 个 import 语句，开始递归扫描...`);
+                    this.scanImportedFiles(imports, filePath, routePrefix);
+                }
             }
 
             // 如果解析成功但没有找到内容，也使用正则表达式作为补充
@@ -285,10 +410,16 @@ class I18nKeyFinder {
 
     scanJsFile(content, filePath, routePrefix) {
         try {
-
             const keys = findI18nCalls(content);
             for (const key of keys) {
                 this.addKeyUsage(key, filePath, routePrefix);
+            }
+
+            // 递归扫描 JS/TS 文件中的 import 文件
+            const imports = this.extractImports(content);
+            if (imports.length > 0) {
+                // console.log(`📦 发现 ${imports.length} 个 import 语句，开始递归扫描...`);
+                this.scanImportedFiles(imports, filePath, routePrefix);
             }
         } catch (error) {
             console.error(`⚠️ 解析 JS/TS 文件失败 ${filePath}: ${error.message}`);
