@@ -519,8 +519,8 @@ class I18nKeyFinder {
 
         // 生成路由路径
         const route = this.generateRoute(isRoute ? filePath : routePrefix);
-            // console.log(routePrefix)
-            // console.log(filePath)
+        // console.log(routePrefix)
+        // console.log(filePath)
         if (key === "trade.detail.high") {
             console.log(3333333333333333)
             console.log(routePrefix)
@@ -616,15 +616,32 @@ class I18nKeyFinder {
                     return {
                         key: key,
                         routes: routes?.map(item => {
-                            const ret =  item.split(':lang')?.[1] || ''
+                            let ret = item.split(':lang')?.[1] || ''
                             if (item === '_lang/spot') {
                                 console.log(4444444444444444444444)
                                 console.log(ret)
                             }
-                            if (ret) {
-                                return ret
+                            if (!ret) {
+                                ret = item.split('_lang')?.[1] || ''
                             }
-                            return item.split('_lang')?.[1] || ''
+
+                            //BTC-USDT
+                            if (ret.endsWith('_id')) {
+                                ret = ret.slice(0, -3) + 'BTC-USDT'
+                            }
+
+                            if (ret.endsWith('_coin')) {
+
+                                ret =  ret.slice(0, -5) + 'BTC-USDT'
+                            }
+
+                            if (ret.endsWith("_contract")) {
+                                ret =  ret.slice(0, -9) + 'BTC-USDT'
+                            }
+
+
+
+                            return ret
                         }),
                         // pages: pages,
                         // routeCount: routes.length,
