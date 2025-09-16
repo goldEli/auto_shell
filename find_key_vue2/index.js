@@ -299,6 +299,10 @@ class I18nKeyFinder {
         for (const importPath of imports) {
             const resolvedPath = this.resolveImportPath(importPath, currentFilePath);
             // console.log(resolvedPath, importPath, currentFilePath );
+            if (importPath == "@components/spot/TradeDetail") {
+                console.log("11111111111111111111")
+                console.log(resolvedPath, routePrefix, resolvedPath)
+            }
 
             if (resolvedPath && !this.scannedFiles.has(resolvedPath)) {
                 this.scannedFiles.add(resolvedPath);
@@ -375,6 +379,10 @@ class I18nKeyFinder {
             // 扫描 template
             if (result.template) {
                 const keys = scanTemplate(result.template.content);
+                if (filePath === '/Users/eli/Documents/weex/projects/web-trade/client/components/spot/TradeDetail.vue') {
+                    console.log(222222222222)
+                    console.log(keys, routePrefix)
+                }
                 for (const key of keys) {
                     this.addKeyUsage(key, filePath, routePrefix);
                 }
@@ -507,10 +515,20 @@ class I18nKeyFinder {
         const usage = this.keyUsageMap.get(key);
         usage.pages.add(filePath);
 
+        const isRoute = filePath.includes(':lang') || filePath.includes('_lang')
+
         // 生成路由路径
-        const route = this.generateRoute(filePath, routePrefix);
+        const route = this.generateRoute(isRoute ? filePath : routePrefix);
+            // console.log(routePrefix)
+            // console.log(filePath)
+        if (key === "trade.detail.high") {
+            console.log(3333333333333333)
+            console.log(routePrefix)
+            console.log(filePath)
+            console.log(route)
+        }
         if (route) {
-            usage.routes.add(route);
+            usage.routes.add(route?.slice());
         }
     }
 
@@ -595,11 +613,18 @@ class I18nKeyFinder {
                     const usage = this.keyUsageMap.get(key);
                     const routes = Array.from(usage.routes).sort();
                     // const pages = Array.from(usage.pages).map(p => path.relative(this.projectRoot, p));
-
                     return {
                         key: key,
                         routes: routes?.map(item => {
-                            return item.split(':lang')?.[1] || ''
+                            const ret =  item.split(':lang')?.[1] || ''
+                            if (item === '_lang/spot') {
+                                console.log(4444444444444444444444)
+                                console.log(ret)
+                            }
+                            if (ret) {
+                                return ret
+                            }
+                            return item.split('_lang')?.[1] || ''
                         }),
                         // pages: pages,
                         // routeCount: routes.length,
