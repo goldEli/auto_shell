@@ -121,6 +121,22 @@ function findI18nCalls(content) {
     // });
 }
 
+// 文件是否存在
+/**
+ * 判断路径是否是文件
+ * @param {string} filePath - 文件路径
+ * @returns {boolean}
+ */
+function isFile(filePath) {
+    try {
+        const stat = fs.statSync(filePath);
+        return stat.isFile();
+    } catch (err) {
+        // 路径不存在或其他错误
+        return false;
+    }
+}
+
 class I18nKeyFinder {
     constructor(i18nFilePath, outputFilePath) {
         this.i18nFilePath = i18nFilePath;
@@ -194,16 +210,16 @@ class I18nKeyFinder {
     // 解析 import 路径为实际文件路径
     resolveImportPath(importPath, currentFilePath) {
         const currentDir = path.dirname(currentFilePath);
+        const extensions = ['.js', '.vue', '/index.vue', '/index.js'];
 
         // 处理相对路径
         if (importPath.startsWith('./') || importPath.startsWith('../')) {
             const resolvedPath = path.resolve(currentDir, importPath);
 
             // 尝试不同的文件扩展名
-            const extensions = ['.js', '.ts', '.vue', '.json'];
             for (const ext of extensions) {
                 const fullPath = resolvedPath + ext;
-                if (fs.existsSync(fullPath)) {
+                if (isFile(fullPath)) {
                     return fullPath;
                 }
             }
@@ -211,7 +227,7 @@ class I18nKeyFinder {
             // 尝试 index 文件
             for (const ext of extensions) {
                 const indexPath = path.join(resolvedPath, 'index' + ext);
-                if (fs.existsSync(indexPath)) {
+                if (isFile(indexPath)) {
                     return indexPath;
                 }
             }
@@ -227,33 +243,52 @@ class I18nKeyFinder {
                 resolvedPath = path.resolve(this.projectRoot, importPath);
             }
 
-            const extensions = ['.js', '.ts', '.vue', '.json'];
             for (const ext of extensions) {
                 const fullPath = resolvedPath + ext;
-                if (fs.existsSync(fullPath)) {
+                if (isFile(fullPath)) {
                     return fullPath;
                 }
             }
         }
 
 
-        if (importPath.startsWith('~/')) {
+        if (['~/', '@/'].some(prefix => importPath.startsWith(prefix))) {
             let resolvedPath;
             resolvedPath = path.join(this.projectRoot, 'client', importPath.slice(2));
 
-            if (fs.existsSync(resolvedPath)) {
+            if (isFile(resolvedPath)) {
                 return resolvedPath;
             }
 
-            const extensions = ['.js', '.vue'];
             for (const ext of extensions) {
                 const fullPath = resolvedPath + ext;
-                if (fs.existsSync(fullPath)) {
+                if (isFile(fullPath)) {
                     return fullPath;
                 }
             }
-
         }
+
+
+        // @
+        if (importPath.startsWith('@')) {
+            let resolvedPath;
+            resolvedPath = path.join(this.projectRoot, 'client', importPath.slice(1));
+
+            if (isFile(resolvedPath)) {
+                return resolvedPath;
+            }
+
+            for (const ext of extensions) {
+                const fullPath = resolvedPath + ext;
+                if (isFile(fullPath)) {
+                    return fullPath;
+                }
+            }
+        }
+
+
+
+
 
         return null;
     }
