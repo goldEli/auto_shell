@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { parse } = require('@babel/parser');
 const traverse = require('@babel/traverse').default;
-const { parse: parseVue } = require('@vue/compiler-sfc');
+const { parseComponent, compile } = require('vue-template-compiler');
 
 class I18nKeyFinder {
     constructor(i18nFilePath, outputFilePath) {
@@ -45,7 +45,7 @@ class I18nKeyFinder {
         for (const [key, value] of Object.entries(obj)) {
             const currentKey = prefix ? `${prefix}.${key}` : key;
             this.i18nKeys.add(currentKey);
-            
+
             if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
                 this.extractKeys(value, currentKey);
             }
@@ -65,11 +65,11 @@ class I18nKeyFinder {
 
     scanDirectory(dir, routePrefix) {
         const items = fs.readdirSync(dir);
-        
+
         for (const item of items) {
             const fullPath = path.join(dir, item);
             const stat = fs.statSync(fullPath);
-            
+
             if (stat.isDirectory()) {
                 // 递归扫描子目录
                 const newPrefix = routePrefix ? `${routePrefix}/${item}` : item;
@@ -89,7 +89,7 @@ class I18nKeyFinder {
         try {
             const content = fs.readFileSync(filePath, 'utf-8');
             const filename = path.basename(filePath);
-            
+
             if (filename.endsWith('.vue')) {
                 this.scanVueFile(content, filePath, routePrefix);
             } else {
@@ -102,20 +102,22 @@ class I18nKeyFinder {
 
     scanVueFile(content, filePath, routePrefix) {
         try {
-            const result = parseVue(content);
-            
+            const result = parseComponent(content);
+
+            // console.log(result, filePath);
+
             // 扫描 template
-            if (result.descriptor && result.descriptor.template) {
-                this.scanTemplate(result.descriptor.template.content, filePath, routePrefix);
+            if (result.template) {
+                this.scanTemplate(result.template.content, filePath, routePrefix);
             }
-            
+
             // 扫描 script
-            if (result.descriptor && result.descriptor.script) {
-                this.scanScript(result.descriptor.script.content, filePath, routePrefix);
+            if (result.script) {
+                this.scanScript(result.script.content, filePath, routePrefix);
             }
-            
+
             // 如果解析成功但没有找到内容，也使用正则表达式作为补充
-            if (!result.descriptor || !result.descriptor.template) {
+            if (!result.template) {
                 console.log(`📝 Vue 解析成功但未找到模板，使用正则表达式补充扫描`);
                 this.scanVueFileWithRegex(content, filePath, routePrefix);
             }
@@ -128,7 +130,7 @@ class I18nKeyFinder {
 
     scanVueFileWithRegex(content, filePath, routePrefix) {
         console.log(`🔍 使用正则表达式扫描 Vue 文件: ${path.basename(filePath)}`);
-        
+
         // 使用正则表达式查找模板中的 i18n 调用
         const i18nPatterns = [
             /\{\{\s*\$t\(['"`]([^'"`]+)['"`]\)\s*\}\}/g,
@@ -171,29 +173,94 @@ class I18nKeyFinder {
                 sourceType: 'module',
                 plugins: ['jsx', 'typescript']
             });
-            
+
             this.findI18nCalls(ast, filePath, routePrefix);
         } catch (error) {
             console.error(`⚠️ 解析 JS/TS 文件失败 ${filePath}: ${error.message}`);
         }
     }
 
-    scanTemplate(templateContent, filePath, routePrefix) {
-        // 使用正则表达式查找模板中的 i18n 调用
-        const i18nPatterns = [
-            /\$t\(['"`]([^'"`]+)['"`]\)/g,
-            /\$tc\(['"`]([^'"`]+)['"`]\)/g,
-            /\$te\(['"`]([^'"`]+)['"`]\)/g,
-            /\$d\(['"`]([^'"`]+)['"`]\)/g
-        ];
+    // 递归遍历 Vue AST
+    traverseVueAst(node, cb) {
+        if (!node) return
 
-        i18nPatterns.forEach(pattern => {
-            let match;
-            while ((match = pattern.exec(templateContent)) !== null) {
-                const key = match[1];
-                this.addKeyUsage(key, filePath, routePrefix);
+        // 表达式 (插值 or 绑定)
+        if (node.expression) {
+            cb(node.expression)
+        }
+        if (node.attrsMap) {
+            Object.values(node.attrsMap).forEach(val => cb(val))
+        }
+
+        if (node.children) {
+            node.children.forEach(child => this.traverseVueAst(child, cb))
+        }
+    }
+
+    // 3. Babel 解析表达式 AST，提取 $t 的参数
+    extractTKeys(content) {
+        try {
+            // const ast = babelParser.parseExpression(expr)
+
+            const ast = parse(content, {
+                sourceType: 'module',
+                plugins: ['jsx', 'typescript']
+            });
+            const keys = []
+
+            traverse(ast, {
+                CallExpression(path) {
+                    if (
+                        (path.node.callee.type === 'MemberExpression' &&
+                            path.node.callee.property.name === '$t') ||
+                        (path.node.callee.type === 'Identifier' &&
+                            path.node.callee.name === '$t')
+                    ) {
+                        const arg = path.node.arguments[0]
+                        if (arg && arg.type === 'StringLiteral') {
+                            keys.push(arg.value)
+                        }
+                    }
+                }
+            })
+
+            return keys
+        } catch (e) {
+            return []
+        }
+    }
+
+    scanTemplate(templateContent, filePath, routePrefix) {
+        const res = compile(templateContent)
+
+        // const allKeys = []
+        this.traverseVueAst(res.ast, expr => {
+            // console.log(expr, filePath);
+            const keys = this.extractTKeys(expr)
+            if (keys.length) {
+                // allKeys.push(...keys)
+                console.log(keys, filePath);
+                for (const key of keys) {
+                    // console.log(key, filePath);
+                    this.addKeyUsage(key, filePath, routePrefix);
+                }
             }
-        });
+        })
+        // 使用正则表达式查找模板中的 i18n 调用
+        // const i18nPatterns = [
+        //     /\$t\(['"`]([^'"`]+)['"`]\)/g,
+        //     /\$tc\(['"`]([^'"`]+)['"`]\)/g,
+        //     /\$te\(['"`]([^'"`]+)['"`]\)/g,
+        //     /\$d\(['"`]([^'"`]+)['"`]\)/g
+        // ];
+
+        // i18nPatterns.forEach(pattern => {
+        //     let match;
+        //     while ((match = pattern.exec(templateContent)) !== null) {
+        //         const key = match[1];
+        //         this.addKeyUsage(key, filePath, routePrefix);
+        //     }
+        // });
     }
 
     scanScript(scriptContent, filePath, routePrefix) {
@@ -202,7 +269,7 @@ class I18nKeyFinder {
                 sourceType: 'module',
                 plugins: ['jsx', 'typescript']
             });
-            
+
             this.findI18nCalls(ast, filePath, routePrefix);
         } catch (error) {
             // 如果解析失败，尝试使用正则表达式
@@ -229,20 +296,40 @@ class I18nKeyFinder {
 
     findI18nCalls(ast, filePath, routePrefix) {
         const self = this;
+
         traverse(ast, {
             CallExpression(path) {
-                const { callee, arguments: args } = path.node;
-                
-                if (callee.type === 'MemberExpression' && 
-                    callee.object.name === '$t' && 
-                    args.length > 0 && 
-                    args[0].type === 'StringLiteral') {
-                    
-                    const key = args[0].value;
-                    self.addKeyUsage(key, filePath, routePrefix);
+                if (
+                    (path.node.callee.type === 'MemberExpression' &&
+                        path.node.callee.property.name === '$t') ||
+                    (path.node.callee.type === 'Identifier' &&
+                        path.node.callee.name === '$t')
+                ) {
+                    const arg = path.node.arguments[0]
+                    if (arg && arg.type === 'StringLiteral') {
+                        // keys.push(arg.value)
+                        self.addKeyUsage(arg.value, filePath, routePrefix);
+                    }
                 }
             }
-        });
+        })
+
+        // traverse(ast, {
+        //     CallExpression(path) {
+        //         const { callee, arguments: args } = path.node;
+
+        //         if (callee.type === 'MemberExpression' && 
+        //             callee.object.name === '$t' && 
+        //             args.length > 0 && 
+        //             args[0].type === 'StringLiteral') {
+
+        //             console.log(args[0].value, filePath);
+
+        //             const key = args[0].value;
+        //             self.addKeyUsage(key, filePath, routePrefix);
+        //         }
+        //     }
+        // });
     }
 
     addKeyUsage(key, filePath, routePrefix) {
@@ -256,7 +343,7 @@ class I18nKeyFinder {
 
         const usage = this.keyUsageMap.get(key);
         usage.pages.add(filePath);
-        
+
         // 生成路由路径
         const route = this.generateRoute(filePath, routePrefix);
         if (route) {
@@ -281,7 +368,7 @@ class I18nKeyFinder {
         console.log('='.repeat(80));
 
         const sortedKeys = Array.from(this.keyUsageMap.keys()).sort();
-        
+
         if (sortedKeys.length === 0) {
             console.log('❌ 未找到任何 i18n key 的使用情况');
             return;
@@ -294,15 +381,15 @@ class I18nKeyFinder {
 
         console.log('\n🔍 详细使用情况:');
         console.log('-'.repeat(80));
-        
+
         // sortedKeys.forEach(key => {
-            // const usage = this.keyUsageMap.get(key);
-            // const routes = Array.from(usage.routes).sort();
-            // const pages = Array.from(usage.pages).map(p => path.relative(this.projectRoot, p));
-            
-            // console.log(`\n🔑 Key: ${key}`);
-            // console.log(`   📍 路由: ${routes.join(', ') || '无'}`);
-            // console.log(`   📄 文件: ${pages.join(', ')}`);
+        // const usage = this.keyUsageMap.get(key);
+        // const routes = Array.from(usage.routes).sort();
+        // const pages = Array.from(usage.pages).map(p => path.relative(this.projectRoot, p));
+
+        // console.log(`\n🔑 Key: ${key}`);
+        // console.log(`   📍 路由: ${routes.join(', ') || '无'}`);
+        // console.log(`   📄 文件: ${pages.join(', ')}`);
         // });
 
         // 显示未使用的 key
@@ -325,7 +412,7 @@ class I18nKeyFinder {
         try {
             const sortedKeys = Array.from(this.keyUsageMap.keys()).sort();
             const unusedKeys = Array.from(this.i18nKeys).filter(key => !this.keyUsageMap.has(key)).sort();
-            
+
             const jsonResult = {
                 metadata: {
                     // projectRoot: this.projectRoot,
@@ -345,7 +432,7 @@ class I18nKeyFinder {
                     const usage = this.keyUsageMap.get(key);
                     const routes = Array.from(usage.routes).sort();
                     // const pages = Array.from(usage.pages).map(p => path.relative(this.projectRoot, p));
-                    
+
                     return {
                         key: key,
                         routes: routes?.map(item => {
@@ -372,7 +459,7 @@ class I18nKeyFinder {
             // 写入 JSON 文件
             fs.writeFileSync(this.outputFilePath, JSON.stringify(jsonResult, null, 2), 'utf-8');
             console.log(`\n💾 JSON 结果已保存到: ${this.outputFilePath}`);
-            
+
         } catch (error) {
             console.error(`❌ 生成 JSON 文件失败: ${error.message}`);
         }
@@ -382,7 +469,7 @@ class I18nKeyFinder {
         console.log('🚀 开始分析 Nuxt2 + Vue i18n 项目...');
         console.log(`📁 项目根目录: ${this.projectRoot}`);
         console.log(`🌐 i18n 文件: ${this.i18nFilePath}`);
-        
+
         this.loadI18nFile();
         this.scanPagesDirectory();
         this.generateReport();
@@ -394,7 +481,7 @@ function parseArguments() {
     const args = process.argv.slice(2);
     let i18nFilePath = null;
     let outputFilePath = null;
-    
+
     for (let i = 0; i < args.length; i++) {
         if (args[i] === '-f' && i + 1 < args.length) {
             i18nFilePath = args[i + 1];
@@ -402,14 +489,14 @@ function parseArguments() {
             outputFilePath = args[i + 1];
         }
     }
-    
+
     if (!i18nFilePath) {
         console.error('❌ 使用方法: find_key_vue2 -f <i18n文件路径> [-o <输出文件路径>]');
         console.error('   示例: find_key_vue2 -f src/locales/en.json');
         console.error('   示例: find_key_vue2 -f src/locales/en.json -o result.json');
         process.exit(1);
     }
-    
+
     return { i18nFilePath, outputFilePath };
 }
 
