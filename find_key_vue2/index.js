@@ -267,7 +267,7 @@ class I18nKeyFinder {
 
             if (resolvedPath && !this.scannedFiles.has(resolvedPath)) {
                 this.scannedFiles.add(resolvedPath);
-                console.log(`🔍 扫描 import 文件: ${path.relative(this.projectRoot, resolvedPath)}`);
+                // console.log(`🔍 扫描 import 文件: ${path.relative(this.projectRoot, resolvedPath)}`);
 
                 try {
                     const content = fs.readFileSync(resolvedPath, 'utf-8');
