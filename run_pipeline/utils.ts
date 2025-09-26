@@ -1,5 +1,11 @@
 import { Browser, BrowserContext, chromium, Page } from "@playwright/test";
 import { gitlabConfig } from "./config";
+import path from "path";
+import { fileURLToPath } from "url";
+
+// Get __dirname equivalent for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export async function onLogin(page: Page) {
   // input username
@@ -23,8 +29,9 @@ export async function save_auth() {
   console.log("👉 请在浏览器里手动完成登录，然后在终端按 Ctrl+C 停止");
 
   // 每 5 秒保存一次登录状态，直到你手动退出
+  const authJsonPaht = path.join(__dirname, "auth.json");
   setInterval(async () => {
-    await context.storageState({ path: "auth.json" });
+    await context.storageState({ path: authJsonPaht });
     console.log("已保存 auth.json");
   }, 1000 * 5);
 }
@@ -38,7 +45,10 @@ export async function openUrl(
     headless,
     slowMo: 50, // 添加延迟以便观察操作
   });
-  const context = await browser.newContext({ storageState: "auth.json" });
+  // 获取命令所在的路径
+  // const cwd = process.cwd();
+  const authJsonPaht = path.join(__dirname, "auth.json");
+  const context = await browser.newContext({ storageState: authJsonPaht });
   const page = await context.newPage();
 
 

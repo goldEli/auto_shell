@@ -1,6 +1,6 @@
 import { Browser, chromium, Page } from "playwright";
 import { gitlabConfig } from "./config";
-import { onLogin } from ".";
+import { onLogin } from "./utils";
 
 /**
  * 使用 Playwright 打开指定 URL 的方法

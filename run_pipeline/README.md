@@ -12,53 +12,79 @@ A command-line interface for selecting one or more projects from a predefined pr
 - 🌿 **Branch support** - Specify branch name with `-b` flag
 
 
+## Installation & Usage
+
+### Global Installation (Recommended)
+```bash
+# Install globally
+pnpm link --global
+
+# Now you can use run-pipeline from anywhere
+run-pipeline --help
+run-pipeline list
+run-pipeline select
+```
+
+### Local Development
+```bash
+# Install dependencies
+pnpm install
+
+# Run locally
+pnpm start list
+```
+
 ## Usage
 
 ### List all projects
 ```bash
+# Global command (recommended)
+run-pipeline list
+
+# Or local development
 pnpm start list
 ```
 
 ### Interactive project selection (multiple by default)
 ```bash
 # Select multiple projects (default behavior)
-pnpm start select
+run-pipeline select
 
 # Select multiple projects with branch
-pnpm start select -b main
+run-pipeline select -b main
 
 # Select single project only
-pnpm start select --single
+run-pipeline select --single
 
 # Select single project with branch
-pnpm start select --single -b develop
+run-pipeline select --single -b develop
 ```
 
 ### Search projects by pattern
 ```bash
 # Search for projects containing "web" (multiple selection by default)
-pnpm start search web
+run-pipeline search web
 
 # Search with branch specification
-pnpm start search web -b main
+run-pipeline search web -b main
 
 # Search with single selection
-pnpm start search admin --single -b develop
+run-pipeline search admin --single -b develop
 ```
 
 ### Pick projects by index
 ```bash
 # Pick specific projects by index (1-based)
-pnpm start pick 1 3 5
+run-pipeline pick 1 3 5
 
 # Pick with branch specification
-pnpm start pick 1 3 5 -b main
+run-pipeline pick 1 3 5 -b main
 ```
 
 ### Show help
 ```bash
-pnpm start --help
-pnpm start select --help
+run-pipeline --help
+run-pipeline select --help
 ```
 
 ## Available Commands

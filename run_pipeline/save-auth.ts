@@ -1,6 +1,6 @@
 import { chromium } from '@playwright/test';
 import { gitlabConfig } from './config';
-import { onLogin } from '.';
+import { onLogin } from './utils';
 
 (async () => {
   const browser = await chromium.launch({ headless: false });

@@ -1,8 +1,11 @@
 {
-  "name": "run_pipeline",
+  "name": "run-pipeline",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "GitLab pipeline execution tool for multiple projects",
+  "main": "run_pipeline.js",
+  "bin": {
+    "run-pipeline": "./run_pipeline.js"
+  },
   "type": "module",
   "scripts": {
     "start": "tsx run_pipeline.ts",
