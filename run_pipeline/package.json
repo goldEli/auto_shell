@@ -1,0 +1,29 @@
+{
+  "name": "run_pipeline",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "tsx run_pipeline.ts",
+    "dev": "tsx run_pipeline.ts",
+    "build": "tsc",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.17.0",
+  "dependencies": {
+    "@playwright/test": "^1.55.1",
+    "commander": "^14.0.1",
+    "inquirer": "^12.9.6",
+    "playwright": "^1.55.1"
+  },
+  "devDependencies": {
+    "@types/inquirer": "^9.0.9",
+    "@types/node": "^24.5.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.2"
+  }
+}
