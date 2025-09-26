@@ -1,4 +1,4 @@
-import { Browser, chromium, Page } from "@playwright/test";
+import { Browser, BrowserContext, chromium, Page } from "@playwright/test";
 import { gitlabConfig } from "./config";
 
 export async function onLogin(page: Page) {
@@ -32,7 +32,7 @@ export async function save_auth() {
 export async function openUrl(
   url: string,
   headless: boolean = false
-): Promise<{ browser: Browser; page: Page }> {
+): Promise<{ browser: Browser; page: Page; context: BrowserContext }> {
   // 启动浏览器
   const browser = await chromium.launch({
     headless,
@@ -70,5 +70,5 @@ export async function openUrl(
 
   console.log(`已成功打开 URL: ${url}`);
 
-  return { browser, page };
+  return { browser, page, context };
 }

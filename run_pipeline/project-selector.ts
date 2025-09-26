@@ -1,85 +1,21 @@
 import { Command } from "commander";
 import inquirer from "inquirer";
-import { gitlabConfig, projectList } from "./config.js";
-import { openUrl } from "./utils.js";
-import { Browser, Page } from "playwright";
-import path from "path";
+import { projectList } from "./config.js";
+import { PipelineExecutor, Project } from "./pipeline-executor.js";
 
-interface Project {
-  name: string;
-  href: string;
-}
 
 class ProjectSelector {
   private program: Command;
+  private pipelineExecutor: PipelineExecutor;
   selectedProjects: Project[] = [];
   inputBranchName: string = "";
 
   constructor() {
     this.program = new Command();
+    this.pipelineExecutor = new PipelineExecutor();
     this.setupCommands();
   }
 
-  private async doProjects(projects: Project[], branch: string) {
-    const  { browser, page } = await openUrl(gitlabConfig.url)
-    for (const project of projects) {
-      await this.doProject(project, browser, page, branch);
-    }
-  }
-
-  private async doProject(project: Project, browser: Browser, page: Page, branch: string) {
-    console.log("--------------------------------");
-    console.log(`do project ${project.name} ${project.href}`);
-    console.log("--------------------------------");
-    const url = path.join(gitlabConfig.url, project.href, '/-/pipelines');
-    await page.goto(url);
-
-    // click new pipeline 
-    // data-testid="run-pipeline-button"
-    console.log("click new pipeline");
-    await page.click('[data-testid="run-pipeline-button"]');
-
-    // click branch dropdown,
-    console.log("click branch dropdown");
-    // await page.click('[data-testid="base-dropdown-toggle"]');
-    await page.click('#dropdown-toggle-btn-27');
-
-    // wait for 1 second
-    console.log("wait for 1 second");
-    await page.waitForTimeout(1000);
-
-
-    // input branch
-    console.log("input branch");
-    await page.fill('[data-testid="listbox-search-input"]', branch);
-
-    // wait for 1 second
-    console.log("wait for 1 second");
-    await page.waitForTimeout(1000);
-
-    // press enter
-    console.log("press enter");
-    await page.keyboard.press('Enter');
-
-    // wait for 1 second
-    console.log("wait for 1 second");
-    await page.waitForTimeout(1000);
-
-    // click run pipeline
-    console.log("run pipeline");
-    await page.click('[data-testid="run-pipeline-button"]');
-
-
-    //  title="Run all manual"
-    console.log("click run all manual");
-    await page.click('[title="Run all manual"]');
-
-    // wait for 1 second
-    console.log("wait for 1 second");
-    // await page.waitForTimeout(1000);
-
-    return Promise.resolve();
-  }
 
   private setupCommands() {
     this.program
@@ -103,9 +39,12 @@ class ProjectSelector {
       .option("-b, --branch <branch>", "Specify branch name")
       .action(async (options) => {
         const selectedProjects = await this.selectProjects(!options.single, options.branch);
-        console.log(selectedProjects);
-        await this.doProjects(selectedProjects, options.branch);
-
+        console.log(`\n📊 Selected ${selectedProjects.length} projects:`);
+        selectedProjects.forEach((project, index) => {
+          console.log(`  ${index + 1}. ${project.name} (${project.href})`);
+        });
+        console.log(`\n🚀 Starting pipeline execution for ${selectedProjects.length} projects...\n`);
+        await this.pipelineExecutor.executePipelines(selectedProjects, options.branch);
       });
 
     // Select projects by name pattern
@@ -115,7 +54,13 @@ class ProjectSelector {
       .option("-s, --single", "Allow only single project selection", false)
       .option("-b, --branch <branch>", "Specify branch name")
       .action(async (pattern, options) => {
-        await this.searchProjects(pattern, !options.single, options.branch);
+        const selectedProjects = await this.searchProjects(pattern, !options.single, options.branch);
+        console.log(`\n📊 Selected ${selectedProjects.length} projects:`);
+        selectedProjects.forEach((project, index) => {
+          console.log(`  ${index + 1}. ${project.name} (${project.href})`);
+        });
+        console.log(`\n🚀 Starting pipeline execution for ${selectedProjects.length} projects...\n`);
+        await this.pipelineExecutor.executePipelines(selectedProjects, options.branch);
       });
 
     // Select projects by index
@@ -123,8 +68,14 @@ class ProjectSelector {
       .command("pick <indices...>")
       .description("Select projects by index numbers (space-separated)")
       .option("-b, --branch <branch>", "Specify branch name")
-      .action((indices, options) => {
-        this.pickProjectsByIndex(indices, options.branch);
+      .action(async (indices, options) => {
+        const selectedProjects = this.pickProjectsByIndex(indices, options.branch);
+        console.log(`\n📊 Selected ${selectedProjects.length} projects:`);
+        selectedProjects.forEach((project, index) => {
+          console.log(`  ${index + 1}. ${project.name} (${project.href})`);
+        });
+        console.log(`\n🚀 Starting pipeline execution for ${selectedProjects.length} projects...\n`);
+        await this.pipelineExecutor.executePipelines(selectedProjects, options.branch);
       });
   }
 
